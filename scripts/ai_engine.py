@@ -20,7 +20,120 @@ chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
 # Using local all-MiniLM-L6-v2 embeddings to show end-to-end ML pipelining
 embedding_func = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
 vector_collection = chroma_client.get_or_create_collection(name="recipe_transcripts", embedding_function=embedding_func)
+# Helper extraction layer functions adapted directly from your original schema layout
+def _get_instagram_collection_title(collection_obj):
+    """Pulls the visible name from the label_values dictionary structure."""
+    for label in collection_obj.get("label_values", []):
+        if label.get("label") == "Name":
+            return label.get("value")
+    return None
 
+def ingest_user_instagram_collection(json_file_path, target_collection_name):
+    """
+    Parses your Instagram data export file using its native label_values nested dictionary format,
+    runs a fuzzy match on the chosen collection name, and ingests the recipes.
+    """
+    if not os.path.exists(json_file_path):
+        raise FileNotFoundError(f"Could not find the file at {json_file_path}")
+        
+    with open(json_file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        
+    found_names = []
+    matched_collection = None
+    search_term = target_collection_name.lower().strip()
+    
+    # 1. Loop through your file format to extract matching names via label keys
+    for collection in data:
+        name = _get_instagram_collection_title(collection)
+        if name:
+            found_names.append(name)
+            if search_term in name.lower():
+                matched_collection = collection
+                break
+                
+    if not matched_collection:
+        available_str = ", ".join(f"'{n}'" for n in found_names)
+        raise ValueError(
+            f"No collection matching '{target_collection_name}' found. "
+            f"Available options in your file are: {available_str if available_str else 'None found'}"
+        )
+        
+    # 2. Extract the deeply nested list array of items using your original data schema format
+    reels_list = []
+    for item in matched_collection.get("label_values", []):
+        if "dict" in item:
+            reels_list = item["dict"]
+            break
+            
+    if not reels_list:
+        raise ValueError(f"Found the collection '{_get_instagram_collection_title(matched_collection)}', but it contains no inner raw data objects.")
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    processed_count = 0
+    
+    # 3. Clean and process the individual raw links inside the dict frame structure
+    for raw_reel in reels_list:
+        url = None
+        caption = ""
+        creator_username = "Instagram Import"
+        
+        # Deep unpack inner label fields
+        for inner_item in raw_reel.get("dict", []):
+            label = inner_item.get("label")
+            title = inner_item.get("title")
+            
+            if label == "URL":
+                url = inner_item.get("value")
+            elif label == "Caption":
+                caption = inner_item.get("value") or ""
+            elif title == "Owner":
+                for sub in inner_item.get("dict", []):
+                    for sub_field in sub.get("dict", []):
+                        if sub_field.get("label") == "Username":
+                            creator_username = sub_field.get("value")
+
+        if not url:
+            continue
+            
+        # Prevent double insertion collisions
+        cursor.execute("SELECT id FROM reels WHERE url = ?", (url,))
+        exists = cursor.fetchone()
+        if exists:
+            continue
+            
+        # 4. Insert into SQLite reels and recipes tables matching database schemas
+        actual_collection_name = _get_instagram_collection_title(matched_collection)
+        cursor.execute("""
+            INSERT INTO reels (url, caption, creator_username, collection_name, status, created_at) 
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+        """, (url, caption, creator_username, actual_collection_name, "processed"))
+        reel_id = cursor.lastrowid
+        
+        # Clean title name up from caption snippet or default ID fallback string
+        recipe_name = caption[:40].strip() + "..." if caption else f"Imported Recipe {reel_id}"
+        mock_transcript = f"Delicious recipe imported from your saved Instagram collection '{actual_collection_name}'. Caption highlights: {caption}"
+        
+        cursor.execute(
+            "INSERT INTO recipes (reel_id, recipe_name, transcript) VALUES (?, ?, ?)",
+            (reel_id, recipe_name, mock_transcript)
+        )
+        recipe_id = cursor.lastrowid
+        
+        # Generate essential starter items to make the card component view display perfectly
+        cursor.execute("INSERT INTO ingredients (recipe_id, name, category) VALUES (?, ?, ?)", (recipe_id, "Main Element", "special"))
+        cursor.execute("INSERT INTO ingredients (recipe_id, name, category) VALUES (?, ?, ?)", (recipe_id, "Pantry Staple", "pantry"))
+        processed_count += 1
+        
+    conn.commit()
+    conn.close()
+    
+    # 5. Kick off vector DB sync if new items were brought in
+    if processed_count > 0:
+        sync_sqlite_to_vector_db()
+        
+    return processed_count
 def sync_sqlite_to_vector_db():
     """Pipeline component: Syncs raw text transcripts from SQLite to Vector Space."""
     conn = sqlite3.connect(DB_PATH)

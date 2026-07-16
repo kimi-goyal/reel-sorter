@@ -1,8 +1,15 @@
+
 # scripts/cookbook_app.py
 import os
 import sqlite3
 import streamlit as st
-from ai_engine import sync_sqlite_to_vector_db, orchestrate_agent_response
+
+# Explicitly pull the new ingestion function here
+from ai_engine import (
+    sync_sqlite_to_vector_db, 
+    orchestrate_agent_response, 
+    ingest_user_instagram_collection
+)
 
 # 1. Page Configuration & Aesthetic Style Injection
 st.set_page_config(
@@ -135,23 +142,41 @@ def load_database_records():
 # 2. Main App Header
 st.markdown('<h1 style="font-family:serif; color:#f4f4f6; font-size: 2.5rem; margin-bottom: 5px;"><span style="color:#e5a93b;">Reel</span> Recipe Box</h1>', unsafe_allow_html=True)
 st.markdown('<p style="color:#8e8e9f; font-size:0.95rem; margin-bottom:30px;">Search recipes with AI, browse your collection via index cards, or plan your weekly grocery runs.</p>', unsafe_allow_html=True)
-
 # 3. Sidebar Controls
 with st.sidebar:
     st.markdown('<h2 style="font-family:serif; color:#f4f4f6; font-size: 1.5rem;">Settings</h2>', unsafe_allow_html=True)
-    st.write("Added new recipes to your library files? Keep the search engine updated here.")
+    st.write("Upload your Instagram data file to automatically import your cooking collections.")
     
-    if st.button("🔄 Refresh Search Engine", use_container_width=True):
-        with st.spinner("Updating smart search data..."):
-            try:
-                count = sync_sqlite_to_vector_db()
-                st.success(f"Successfully refreshed {count} recipes!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Could not refresh: {str(e)}")
-                
-    st.divider()
-    st.markdown("💡 **Pro-Tip:** In the AI Assistant tab, try asking: *'Give me something spicy and tell me what special ingredients I need to buy!'*")
+    with st.form(key="instagram_upload_form"):
+        # Let the user name the collection inside their JSON file
+        target_col = st.text_input("Collection Name in Instagram", placeholder="e.g., Cooking Inspo")
+        
+        # File uploader targeting the saved_collections.json structure
+        uploaded_file = st.file_uploader("Upload saved_collections.json", type=["json"])
+        
+        submit_btn = st.form_submit_button("🔄 Process & Import Collection", use_container_width=True)
+    if submit_btn:
+        if not target_col or not uploaded_file:
+            st.error("Please fill out the collection name and upload your JSON file!")
+        else:
+            with st.spinner("Parsing your Instagram data..."):
+                try:
+                    # Save the uploaded file temporarily to pass to the engine
+                    temp_path = "temp_saved_collections.json"
+                    with open(temp_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    
+                    # Call the function directly
+                    count = ingest_user_instagram_collection(temp_path, target_col)
+                    
+                    # Cleanup file
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                        
+                    st.success(f"Added {count} new recipes from your '{target_col}' collection!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Import Error: {str(e)}")
 
 # 4. Data Conversion Layer
 raw_data = load_database_records()
