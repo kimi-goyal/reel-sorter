@@ -108,23 +108,23 @@ def ingest_user_instagram_collection(json_file_path, target_collection_name):
         cursor.execute("""
             INSERT INTO reels (url, caption, creator_username, collection_name, status, created_at) 
             VALUES (?, ?, ?, ?, ?, datetime('now'))
-        """, (url, caption, creator_username, actual_collection_name, "processed"))
+        """, (url, caption, creator_username, actual_collection_name, "pending"))
         reel_id = cursor.lastrowid
         
-        # Clean title name up from caption snippet or default ID fallback string
-        recipe_name = caption[:40].strip() + "..." if caption else f"Imported Recipe {reel_id}"
-        mock_transcript = f"Delicious recipe imported from your saved Instagram collection '{actual_collection_name}'. Caption highlights: {caption}"
+        # # Clean title name up from caption snippet or default ID fallback string
+        # recipe_name = caption[:40].strip() + "..." if caption else f"Imported Recipe {reel_id}"
+        # mock_transcript = f"Delicious recipe imported from your saved Instagram collection '{actual_collection_name}'. Caption highlights: {caption}"
         
-        cursor.execute(
-            "INSERT INTO recipes (reel_id, recipe_name, transcript) VALUES (?, ?, ?)",
-            (reel_id, recipe_name, mock_transcript)
-        )
-        recipe_id = cursor.lastrowid
+        # cursor.execute(
+        #     "INSERT INTO recipes (reel_id, recipe_name, transcript) VALUES (?, ?, ?)",
+        #     (reel_id, recipe_name, mock_transcript)
+        # )
+        # recipe_id = cursor.lastrowid
         
-        # Generate essential starter items to make the card component view display perfectly
-        cursor.execute("INSERT INTO ingredients (recipe_id, name, category) VALUES (?, ?, ?)", (recipe_id, "Main Element", "special"))
-        cursor.execute("INSERT INTO ingredients (recipe_id, name, category) VALUES (?, ?, ?)", (recipe_id, "Pantry Staple", "pantry"))
-        processed_count += 1
+        # # Generate essential starter items to make the card component view display perfectly
+        # cursor.execute("INSERT INTO ingredients (recipe_id, name, category) VALUES (?, ?, ?)", (recipe_id, "Main Element", "special"))
+        # cursor.execute("INSERT INTO ingredients (recipe_id, name, category) VALUES (?, ?, ?)", (recipe_id, "Pantry Staple", "pantry"))
+        # processed_count += 1
         
     conn.commit()
     conn.close()
