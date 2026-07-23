@@ -18,10 +18,9 @@ The app has four working parts:
 4. **Agent orchestration** (`ai_engine.py: orchestrate_agent_response`) — routes each chat question to either a structured SQL tool or a semantic vector search tool depending on what the question needs, then synthesizes a natural-language answer from the result.
 
 ---
+```
 
 ## Architecture
-
-
 ┌───────────────────────┐
 │ Instagram Export        │
 │ (saved_collections.json)│
@@ -48,19 +47,19 @@ The app has four working parts:
 └───────────┬───────────┘
             │ status → 'processed'
             ▼
-┌───────────────────────┐           ┌───────────────────────┐
-│ SQLite                │───────▶   │ ChromaDB              │
-│ (reels, recipes,      │  sync     │ (vector embeddings of │
-│ ingredients)          │           │ recipe transcripts,   │
-└───────────┬───────────┘           │ all-MiniLM-L6-v2)     │
+┌───────────────────────┐        ┌───────────────────────┐
+│ SQLite                  │───────▶│ ChromaDB                │
+│ (reels, recipes,         │  sync  │ (vector embeddings of   │
+│ ingredients)             │        │ recipe transcripts,      │
+└───────────┬───────────┘        │ all-MiniLM-L6-v2)        │
             │                       └───────────┬───────────┘
             │                                     │
             ▼                                     ▼
 ┌─────────────────────────────────────────────────────────┐
-│               Agent Orchestrator (Groq, tool-calling)   │
-│  routes each query to either:                           │
-│   • tool_sql_query_executor       (exact counts/lookups)│
-│   • tool_semantic_vector_search    (fuzzy/conceptual) │
+│               Agent Orchestrator (Groq, tool-calling)     │
+│  routes each query to either:                              │
+│   • tool_sql_query_executor        (exact counts/lookups)  │
+│   • tool_semantic_vector_search    (fuzzy/conceptual)       │
 └───────────────────────────┬───────────────────────────┘
                               ▼
                   ┌───────────────────────┐
@@ -68,8 +67,7 @@ The app has four working parts:
                   │ (Cookbook / Ask the Box │
                   │ / Grocery Planner)      │
                   └───────────────────────┘
-
-
+```
 ---
 
 ## Features
@@ -92,7 +90,7 @@ The app has four working parts:
 | Storage          | SQLite                                                                   |
 | Vector store     | ChromaDB (`all-MiniLM-L6-v2` embeddings via Sentence Transformers)       |
 | LLM / Agent      | Groq API (Llama 3.3 70B — function/tool calling + structured extraction) |
-|---------------------------------------------------------------------------------------------|
+
 
 ---
 
@@ -104,7 +102,7 @@ The app has four working parts:
 |--------|-----------------------------------|-----------------------------------------------------------------------------------------|
 | `GET`  | `/api/recipes`                    | Returns non-skipped recipes with reel details and ingredients split into common/special |
 | `POST` | `/api/recipes/{recipe_id}/status` | Marks a recipe approved (1) or skipped (0)                                              |
-|--------|-----------------------------------|-----------------------------------------------------------------------------------------|
+
 
 **Agent tools (internal, not HTTP endpoints — used by `orchestrate_agent_response`)**
 
